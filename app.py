@@ -44,6 +44,50 @@ def home():
 def get_db_connection():
     return psycopg2.connect(cursor_factory=RealDictCursor, **DB_CONFIG)
 
+# Sesiones
+def cargar_sesion(celular):
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM sesiones WHERE celular = %s", (celular,))
+            return cursor.fetchone()
+    except Exception as e:
+        logger.error(f"Error al cargar sesión: {e}")
+        return None
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+def guardar_sesion(celular, paso, fecha=None, hora=None, cancha=None):
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO sesiones (celular, paso, fecha, hora, cancha)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (celular) DO UPDATE 
+                SET paso = EXCLUDED.paso, fecha = EXCLUDED.fecha, hora = EXCLUDED.hora, cancha = EXCLUDED.cancha
+            """, (celular, paso, fecha, hora, cancha))
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Error al guardar sesión: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+def limpiar_sesion(celular):
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM sesiones WHERE celular = %s", (celular,))
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Error al limpiar sesión: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+# Lógica
 def buscar_socio_por_celular(celular):
     try:
         cleaned_number = ''.join([c for c in celular if c.isdigit() or c == '+'])
@@ -144,20 +188,49 @@ def whatsapp_reply():
 
         logger.info(f"Mensaje de {user_number}: {user_message}")
 
-        session = {'step': None, 'fecha': None, 'hora': None, 'cancha': None}
+        sesion = cargar_sesion(user_number)
+        paso = sesion['paso'] if sesion else None
+
+        socio = buscar_socio_por_celular(user_number)
+        response = MessagingResponse()
+
+        if paso == 'esperando_hora':
+            hora = user_message
+            canchas = obtener_canchas_disponibles(sesion['fecha'], hora)
+            if not canchas:
+                response.message(f"{EMOJIS['cross']} No hay canchas disponibles a las {hora}")
+            else:
+                guardar_sesion(user_number, 'esperando_cancha', sesion['fecha'], hora)
+                response.message(
+                    f"{EMOJIS['court']} Canchas disponibles a las {hora}:\n\n"
+                    f"{', '.join([f'Cancha {c}' for c in canchas])}\n\n"
+                    f"Por favor, escribe el número de cancha que deseas (ej: 1)"
+                )
+            return str(response), 200, {'Content-Type': 'text/xml'}
+
+        elif paso == 'esperando_cancha':
+            cancha = user_message
+            reserva = realizar_reserva(sesion['fecha'], sesion['hora'], cancha, socio)
+            if reserva:
+                response.message(
+                    f"{EMOJIS['check']} ¡Reserva confirmada!\n\n"
+                    f"{EMOJIS['calendar']} Día: {sesion['fecha']}\n"
+                    f"{EMOJIS['clock']} Hora: {sesion['hora']}\n"
+                    f"{EMOJIS['court']} Cancha: {cancha}"
+                )
+            else:
+                response.message(f"{EMOJIS['cross']} No se pudo hacer la reserva. Intenta más tarde.")
+            limpiar_sesion(user_number)
+            return str(response), 200, {'Content-Type': 'text/xml'}
 
         if re.match(r'^\d{1,2}-\d{1,2}$', user_message):
             valido, fecha = verificar_fecha_disponible(user_message)
             if not valido:
-                response = MessagingResponse()
                 response.message(f"{EMOJIS['cross']} {fecha}")
                 return str(response), 200, {'Content-Type': 'text/xml'}
 
-            session['fecha'] = fecha
             horas = obtener_horas_disponibles(fecha)
-
             if not horas:
-                response = MessagingResponse()
                 response.message(f"{EMOJIS['cross']} No hay horarios disponibles para el {user_message}")
                 return str(response), 200, {'Content-Type': 'text/xml'}
 
@@ -165,8 +238,7 @@ def whatsapp_reply():
                 f"{EMOJIS['clock']} {hora['hora_inicial']} a {hora['hora_final']} (Canchas: {hora['canchas']})"
                 for hora in horas
             ])
-
-            response = MessagingResponse()
+            guardar_sesion(user_number, 'esperando_hora', fecha)
             response.message(
                 f"{EMOJIS['calendar']} Horarios disponibles para el {user_message}:\n\n"
                 f"{opciones}\n\n"
@@ -174,53 +246,34 @@ def whatsapp_reply():
             )
             return str(response), 200, {'Content-Type': 'text/xml'}
 
-        elif re.match(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$', user_message) and session.get('fecha'):
-            canchas = obtener_canchas_disponibles(session['fecha'], user_message)
-
-            if not canchas:
-                response = MessagingResponse()
-                response.message(f"{EMOJIS['cross']} No hay canchas disponibles a las {user_message}")
-                return str(response), 200, {'Content-Type': 'text/xml'}
-
-            response = MessagingResponse()
-            response.message(
-                f"{EMOJIS['court']} Canchas disponibles a las {user_message}:\n\n"
-                f"{', '.join([f'Cancha {c}' for c in canchas])}\n\n"
-                f"Por favor, escribe el número de cancha que deseas (ej: 1)"
-            )
-            return str(response), 200, {'Content-Type': 'text/xml'}
-
-        socio = buscar_socio_por_celular(user_number)
-
         if socio:
             if 'si' in user_message.lower() or 'sí' in user_message.lower():
-                response_text = (
+                response.message(
                     f"{EMOJIS['hand']} ¡Hola {socio['nombre']}! {EMOJIS['happy']}\n\n"
                     f"{EMOJIS['calendar']} Por favor, escribe el día que deseas reservar (DD-MM)\n"
-                    f"Ejemplo: 20-04 para el 20 de Abril"
+                    f"Ejemplo: 10-03 para el 10 de Marzo"
                 )
             else:
-                response_text = (
+                response.message(
                     f"{EMOJIS['hand']} ¡Hola! {EMOJIS['happy']}\n\n"
-                    f"{EMOJIS['ball']} *Bienvenido a Club de Tenis Chocalán* {EMOJIS['ball']}\n\n"
-                    f"{EMOJIS['calendar']} ¿Deseas reservar una cancha? Responde 'SI' {EMOJIS['calendar']}"
+                    f"{EMOJIS['tennis']} *Bienvenido a Club de Tenis Chocalán* {EMOJIS['tennis']}\n\n"
+                    f"{EMOJIS['calendar']} ¿Deseas reservar una cancha? Responde 'SI'"
                 )
         else:
-            response_text = (
+            response.message(
                 f"{EMOJIS['cross']} No encontramos tu número en la base de datos.\n"
                 f"Si es un error, contáctanos para verificar tus datos. {EMOJIS['info']}"
             )
 
-        response = MessagingResponse()
-        response.message(response_text)
         return str(response), 200, {'Content-Type': 'text/xml'}
 
     except Exception as e:
         logger.error(f"Error: {e}")
         response = MessagingResponse()
-        response.message(f"{EMOJIS['warning']} Error interno. Intenta más tarde. {EMOJIS['warning']}")
+        response.message(f"{EMOJIS['warning']} Error interno. Intenta más tarde.")
         return str(response), 200, {'Content-Type': 'text/xml'}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
