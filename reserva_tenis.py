@@ -14,13 +14,14 @@ app = Flask(__name__)
 
 # Configuración de la base de datos (usar variables de entorno en producción)
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'mysql.clubdetenismelipilla.cl'),
-    'user': os.getenv('DB_USER', 'clubdet1_jmc'),
-    'password': os.getenv('DB_PASS', 'sebaisi.01'),
-    'database': os.getenv('DB_NAME', 'clubdet1_clubdetenis'),
+    'host': 'mysql.clubdetenismelipilla.cl',  # ¡Verifica este valor!
+    'user': 'clubdet1_jmc',
+    'password': 'sebaisi.01',
+    'database': 'clubdet1_clubdetenis',
     'charset': 'utf8mb4',
-    'cursorclass': pymysql.cursors.DictCursor
+    'port': 3306  # Añade el puerto explícitamente
 }
+
 
 # Decorador para validar peticiones de Twilio
 def validate_twilio_request(f):
