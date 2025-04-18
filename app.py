@@ -2,38 +2,38 @@ from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 import logging
 import os
-import pymysql
-from fuzzywuzzy import fuzz  # Por si se usa más adelante
-from pathlib import Path
-import json
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+app = Flask(__name__)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-
-# Datos de conexión a la base de datos
-DB_HOST = os.getenv('DB_HOST', 'tu_host_mysql')  # ejemplo: 'mysql.hosting.cl'
-DB_USER = os.getenv('DB_USER', 'clubdet1')
-DB_PASS = os.getenv('DB_PASS', 'tu_clave_segura')
-DB_NAME = os.getenv('DB_NAME', 'clubdet1_clubdetenis')
+# Datos de conexión a la base de datos PostgreSQL (Render)
+DB_HOST = os.getenv('DB_HOST', 'dpg-d00re5c9c44c73ckj38g-a.oregon-postgres.render.com')
+DB_USER = os.getenv('DB_USER', 'reservas_0m08_user')
+DB_PASS = os.getenv('DB_PASS', 'gJ6CvycTBwpsWe7j166vb7nA5RqQPx9k')
+DB_NAME = os.getenv('DB_NAME', 'reservas_0m08')
+DB_PORT = os.getenv('DB_PORT', '5432')
 
 def buscar_socio_por_celular(celular):
     try:
-        connection = pymysql.connect(
+        connection = psycopg2.connect(
             host=DB_HOST,
+            port=DB_PORT,
             user=DB_USER,
             password=DB_PASS,
-            database=DB_NAME,
-            charset='utf8mb4',
-            cursorclass=pymysql.cursors.DictCursor
+            dbname=DB_NAME,
+            cursor_factory=RealDictCursor
         )
 
-        with connection.cursor() as cursor:
-            sql = "SELECT * FROM socios WHERE celular LIKE %s"
-            cursor.execute(sql, ('%' + celular + '%',))
-            result = cursor.fetchone()
-            return result
+        with connection:
+            with connection.cursor() as cursor:
+                sql = "SELECT * FROM socios WHERE celular LIKE %s"
+                cursor.execute(sql, ('%' + celular + '%',))
+                result = cursor.fetchone()
+                return result
 
     except Exception as e:
         logger.error(f"Error al conectar a la base de datos: {e}")
@@ -48,10 +48,14 @@ def whatsapp_reply():
         socio = buscar_socio_por_celular(user_number)
 
         if socio:
-            nombre = socio['nombre_completo']
-            return build_twiml_response(f"🙌 Hola {nombre}, tu número está registrado en el sistema.")
+            nombre = socio['nombre']
+            return build_twiml_response(
+                f"🎾 *Bienvenido a Club de Tenis Chocalán* 🎾\n\n🙌 Hola *{nombre}*, tu número está registrado en el sistema.\n\n📅 ¿Deseas reservar una cancha?"
+            )
         else:
-            return build_twiml_response("❌ No encontramos tu número en la base de datos de socios.")
+            return build_twiml_response(
+                "🚫 No encontramos tu número en la base de datos de socios.\nSi crees que esto es un error, contáctanos para verificar tus datos."
+            )
 
     except Exception as e:
         logger.error(f"Error: {str(e)}")
