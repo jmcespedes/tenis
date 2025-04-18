@@ -25,37 +25,30 @@ DB_CONFIG = {
 def home():
     return 'Aplicación en funcionamiento!'
 
-def normalize_phone_number(phone):
-    """Normaliza números de teléfono para coincidir con formato en BD"""
-    # Elimina todo excepto dígitos
-    digits = ''.join(filter(str.isdigit, phone))
-    
-    # Para números chilenos (ajusta según tu país)
-    if digits.startswith('569'):  # Código de país +9
-        return digits[3:]  # Quita el 569
-    elif digits.startswith('56'):  # Código de país
-        return digits[2:]  # Quita el 56
-    elif digits.startswith('9') and len(digits) == 9:  # Número con 9 inicial
-        return digits[1:]  # Quita el 9 inicial
-    return digits[-8:]  # Toma los últimos 8 dígitos como último recurso
-
 def get_db_connection():
     """Obtiene conexión a la base de datos"""
     return psycopg2.connect(cursor_factory=RealDictCursor, **DB_CONFIG)
 
 def buscar_socio_por_celular(celular):
-    """Busca socio por número de celular"""
+    """Busca socio por número de celular en formato +569XXXXXXXX"""
     try:
-        # Normaliza el número para búsqueda
-        celular_normalizado = normalize_phone_number(celular)
-        logger.info(f"Buscando número normalizado: {celular_normalizado}")
+        # Limpiar el número manteniendo el formato +569...
+        cleaned_number = ''.join([c for c in celular if c.isdigit() or c == '+'])
+        
+        # Asegurar que tenga el formato correcto
+        if not cleaned_number.startswith('+569') and len(cleaned_number) >= 9:
+            if cleaned_number.startswith('569'):
+                cleaned_number = '+' + cleaned_number
+            elif cleaned_number.startswith('9'):
+                cleaned_number = '+56' + cleaned_number
+        
+        logger.info(f"Buscando número en formato BD: {cleaned_number}")
         
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            # Busca coincidencias en los últimos 8 dígitos
             cursor.execute(
-                "SELECT * FROM socios WHERE celular LIKE %s OR celular LIKE %s",
-                (f'%{celular_normalizado}', f'%{celular}')  # Busca ambos formatos
+                "SELECT * FROM socios WHERE celular = %s",
+                (cleaned_number,)
             )
             return cursor.fetchone()
     except Exception as e:
@@ -69,13 +62,12 @@ def buscar_socio_por_celular(celular):
 def whatsapp_reply():
     """Endpoint para respuestas de WhatsApp"""
     try:
-        # Obtener número de WhatsApp
+        # El número de Twilio ya viene en formato whatsapp:+569XXXXXXXX
         whatsapp_number = request.form.get('From', '')
         logger.info(f"Número recibido de Twilio: {whatsapp_number}")
         
-        # Limpiar y normalizar número
+        # Extraer solo la parte del número (+569XXXXXXXX)
         user_number = whatsapp_number.replace('whatsapp:', '')
-        logger.info(f"Número limpio: {user_number}")
         
         # Buscar socio en BD
         socio = buscar_socio_por_celular(user_number)
