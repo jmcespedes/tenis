@@ -163,12 +163,11 @@ def realizar_reserva(fecha, hora, cancha, socio):
             cursor.execute("""
                 UPDATE reservas 
                 SET reservada = 1, 
-                    rut_socio = %s,
-                    nombre_socio = %s,
-                    celular_socio = %s
+                    rut = %s,
+                    celular = %s                    
                 WHERE fecha = %s AND hora_inicial = %s AND cancha = %s
                 RETURNING *
-            """, (socio['rut'], socio['nombre'], socio['celular'], fecha, hora, cancha))
+            """, (socio['rut'], socio['celular'], fecha, hora, cancha))
             conn.commit()
             return cursor.fetchone()
     except Exception as e:
