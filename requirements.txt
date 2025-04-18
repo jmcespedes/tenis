@@ -1,0 +1,5 @@
+Flask
+twilio
+pymysql
+fuzzywuzzy
+python-Levenshtein
