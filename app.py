@@ -67,4 +67,5 @@ def build_twiml_response(message_text):
     return str(response), 200, {'Content-Type': 'text/xml'}
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 5000))  # Usa el puerto proporcionado por Render
+    app.run(host='0.0.0.0', port=port)
