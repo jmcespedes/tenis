@@ -5,7 +5,12 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+# Crear la instancia de la aplicación Flask
 app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return 'Aplicación en funcionamiento!'
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -65,7 +70,6 @@ def build_twiml_response(message_text):
     response = MessagingResponse()
     response.message(message_text)
     return str(response), 200, {'Content-Type': 'text/xml'}
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
