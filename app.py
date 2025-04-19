@@ -158,7 +158,7 @@ def realizar_reserva(fecha, hora_inicial, cancha, rut, celular):
         cur.execute("""
             UPDATE reservas
             SET reservada = 1, rut = %s, celular = %s
-            WHERE fecha = %s AND hora_inicial::TIME = %s AND cancha LIKE %s AND reservada = 0
+            WHERE fecha = %s AND hora_inicial::TIME = %s AND cancha = %s AND reservada = 0
         """, (rut, celular, fecha, hora_inicial, cancha))
 
         conn.commit()
