@@ -42,11 +42,11 @@ EMOJIS = {
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
 
-def cargar_sesion(telefono):
+def cargar_sesion(celular):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM sesiones WHERE telefono = %s", (telefono,))
+        cur.execute("SELECT * FROM sesiones WHERE celular = %s", (celular,))
         sesion = cur.fetchone()
         cur.close()
         conn.close()
@@ -55,37 +55,37 @@ def cargar_sesion(telefono):
         logger.error(f"Error al cargar sesión: {e}", exc_info=True)
         return None
 
-def guardar_sesion(telefono, paso, fecha=None, hora=None):
+def guardar_sesion(celular, paso, fecha=None, hora=None):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO sesiones (telefono, paso, fecha, hora)
+            INSERT INTO sesiones (celular, paso, fecha, hora)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (telefono) DO UPDATE SET paso = EXCLUDED.paso, fecha = EXCLUDED.fecha, hora = EXCLUDED.hora
-        """, (telefono, paso, fecha, hora))
+            ON CONFLICT (celular) DO UPDATE SET paso = EXCLUDED.paso, fecha = EXCLUDED.fecha, hora = EXCLUDED.hora
+        """, (celular, paso, fecha, hora))
         conn.commit()
         cur.close()
         conn.close()
     except Exception as e:
         logger.error(f"Error al guardar sesión: {e}", exc_info=True)
 
-def limpiar_sesion(telefono):
+def limpiar_sesion(celular):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("DELETE FROM sesiones WHERE telefono = %s", (telefono,))
+        cur.execute("DELETE FROM sesiones WHERE celular = %s", (celular,))
         conn.commit()
         cur.close()
         conn.close()
     except Exception as e:
         logger.error(f"Error al limpiar sesión: {e}", exc_info=True)
 
-def buscar_socio_por_celular(telefono):
+def buscar_socio_por_celular(celular):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM socios WHERE telefono = %s", (telefono,))
+        cur.execute("SELECT * FROM socios WHERE celular = %s", (celular,))
         socio = cur.fetchone()
         cur.close()
         conn.close()
