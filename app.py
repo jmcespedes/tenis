@@ -257,10 +257,10 @@ def whatsapp_reply():
 
         if 'si' in user_message.lower() or 'sí' in user_message.lower():
             response.message(
-                f"{EMOJIS['{Socio['nombre']}! {EMOJIS['tennis']}\n\n"
+                f"{EMOJIS['hand']} ¡Hola {socio['nombre']}! {EMOJIS['tennis']}\n\n"
                 f"{EMOJIS['calendar']} Por favor, escribe el día que deseas reservar (DD-MM)\n"
                 f"Ejemplo: 19-04 para el 19 de Abril"
-            )
+)
         else:
             response.message(                
                 f"{EMOJIS['tennis']} *Bienvenido a Club de Tenis Melipilla* {EMOJIS['tennis']}\n\n"
