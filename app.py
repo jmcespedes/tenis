@@ -127,7 +127,7 @@ def obtener_canchas_disponibles(fecha, hora_inicial):
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT cancha_id 
+            SELECT distinct cancha
             FROM reservas 
             WHERE fecha = %s AND CAST(hora_inicial AS TEXT) LIKE %s
         """, (fecha, f"{hora_inicial}%",))
