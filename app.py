@@ -146,8 +146,8 @@ def realizar_reserva(fecha, hora_inicial, cancha, rut, celular):
 
         # 1. Verificar si la hora/cancha existe y está disponible (reservada = 0)
         cur.execute("""
-            SELECT id FROM reservas
-            WHERE fecha = %s AND CAST(hora_inicial AS TEXT) LIKE %s AND cancha =  %s AND reservada = 0
+        SELECT id FROM reservas
+        WHERE fecha = %s AND hora_inicial::TIME = %s AND cancha = %s AND reservada = 0
         """, (fecha, hora_inicial, cancha))
         reserva_disponible = cur.fetchone()
 
@@ -158,7 +158,7 @@ def realizar_reserva(fecha, hora_inicial, cancha, rut, celular):
         cur.execute("""
             UPDATE reservas
             SET reservada = 1, rut = %s, celular = %s
-            WHERE fecha = %s AND hora_inicial = %s AND cancha LIKE %s AND reservada = 0
+            WHERE fecha = %s ANDhora_inicial::TIME = %s AND cancha LIKE %s AND reservada = 0
         """, (rut, celular, fecha, hora_inicial, cancha))
 
         conn.commit()
