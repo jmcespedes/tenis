@@ -139,7 +139,7 @@ def obtener_canchas_disponibles(fecha, hora_inicial):
         logger.error(f"Error al obtener canchas disponibles: {e}", exc_info=True)
         return []
 
-def realizar_reserva(fecha, hora_inicial, cancha, socio):
+def realizar_reserva(fecha, hora_inicial, cancha, rut, celular):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -147,7 +147,7 @@ def realizar_reserva(fecha, hora_inicial, cancha, socio):
         # 1. Verificar si la hora/cancha existe y está disponible (reservada = 0)
         cur.execute("""
             SELECT id FROM reservas
-            WHERE fecha = %s AND hora_inicial = %s AND cancha = %s AND reservada = 0
+            WHERE fecha = %s AND CAST(hora_inicial AS TEXT) LIKE %s AND CAST(cancha AS TEXT) LIKE %s AND reservada = 0
         """, (fecha, hora_inicial, cancha))
         reserva_disponible = cur.fetchone()
 
@@ -157,9 +157,9 @@ def realizar_reserva(fecha, hora_inicial, cancha, socio):
         # 2. Si está disponible, actualizar a "reservada" y asignar al socio
         cur.execute("""
             UPDATE reservas
-            SET reservada = 1, socio_id = %s
-            WHERE fecha = %s AND hora_inicial = %s AND cancha = %s AND reservada = 0
-        """, (socio['id'], fecha, hora_inicial, cancha))
+            SET reservada = 1, rut = %s, celular = %s
+            WHERE fecha = %s AND hora_inicial = %s AND CAST(cancha AS TEXT) LIKE %s AND reservada = 0
+        """, (rut, celular, fecha, hora_inicial, cancha))
 
         conn.commit()
         cur.close()
