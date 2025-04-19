@@ -218,6 +218,7 @@ def whatsapp_reply():
 
         elif paso == 'esperando_cancha':
             cancha = user_message
+            cancha = int(cancha) 
             reserva = realizar_reserva(sesion['fecha'], sesion['hora'], cancha, socio)
             if reserva:
                 response.message(
