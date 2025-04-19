@@ -9,11 +9,11 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Configuración inicial del logger (EXACTA A TU VERSIÓN ORIGINAL)
+# Configuración del logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuración de la base de datos (IDÉNTICA A TU VERSIÓN)
+# Configuración de la base de datos
 DB_CONFIG = {
     'host': os.getenv('DB_HOST', 'dpg-d00re5c9c44c73ckj38g-a.oregon-postgres.render.com'),
     'user': os.getenv('DB_USER', 'reservas_0m08_user'),
@@ -22,7 +22,7 @@ DB_CONFIG = {
     'port': os.getenv('DB_PORT', '5432')
 }
 
-# Emojis (COMPLETO Y ASEGURADO)
+# Emojis
 EMOJIS = {
     'tennis': '🎾',
     'hand': '👋',
@@ -37,15 +37,65 @@ EMOJIS = {
     'court': '🏟️'
 }
 
-# [TODAS TUS FUNCIONES ORIGINALES SE MANTIENEN SIN CAMBIOS]
-# get_db_connection, cargar_sesion, guardar_sesion, limpiar_sesion
-# buscar_socio_por_celular, verificar_fecha_disponible
+# Funciones de base de datos y sesión
+def get_db_connection():
+    return psycopg2.connect(
+        host=DB_CONFIG['host'],
+        user=DB_CONFIG['user'],
+        password=DB_CONFIG['password'],
+        dbname=DB_CONFIG['dbname'],
+        port=DB_CONFIG['port'],
+        cursor_factory=RealDictCursor
+    )
+
+def cargar_sesion(numero):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM sesiones WHERE numero = %s", (numero,))
+        sesion = cur.fetchone()
+        cur.close()
+        conn.close()
+        return sesion
+    except Exception as e:
+        logger.error(f"Error al cargar sesión: {e}", exc_info=True)
+        return None
+
+def guardar_sesion(numero, paso, fecha=None, hora=None):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO sesiones (numero, paso, fecha, hora)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (numero) DO UPDATE
+            SET paso = EXCLUDED.paso,
+                fecha = EXCLUDED.fecha,
+                hora = EXCLUDED.hora
+        """, (numero, paso, fecha, hora))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error al guardar sesión: {e}", exc_info=True)
+
+def limpiar_sesion(numero):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM sesiones WHERE numero = %s", (numero,))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error al limpiar sesión: {e}", exc_info=True)
+
+# Aquí deberían ir tus funciones: buscar_socio_por_celular, verificar_fecha_disponible,
 # obtener_horas_disponibles, obtener_canchas_disponibles, realizar_reserva
 
 @app.route("/whatsapp", methods=['POST'])
 def whatsapp_reply():
     try:
-        # Obtener datos del mensaje (IGUAL A TU VERSIÓN)
         user_message = request.form.get('Body', '').strip()
         whatsapp_number = request.form.get('From', '')
         user_number = whatsapp_number.replace('whatsapp:', '')
@@ -58,7 +108,6 @@ def whatsapp_reply():
         
         response = MessagingResponse()
 
-        # SOLO AGREGAMOS BOTONES EN EL MENSAJE INICIAL (LO MÁS SEGURO)
         if not socio:
             response.message(
                 f"{EMOJIS['cross']} No encontramos tu número en la base de datos.\n"
@@ -67,16 +116,14 @@ def whatsapp_reply():
             return str(response), 200, {'Content-Type': 'text/xml'}
 
         if not paso and not user_message:
-            # SOLO CAMBIO: Mensaje inicial con botones (el más seguro)
             msg = response.message(
                 f"{EMOJIS['hand']} ¡Hola {socio['nombre']}! {EMOJIS['happy']}\n\n"
                 f"{EMOJIS['tennis']} *Bienvenido a Club de Tenis Melipilla* {EMOJIS['tennis']}"
             )
-            msg.action("Sí, reservar")  # Botón 1
-            msg.action("Consultar reservas")  # Botón 2
+            msg.action("Sí, reservar")
+            msg.action("Consultar reservas")
             return str(response), 200, {'Content-Type': 'text/xml'}
 
-        # [TODO EL RESTO DE TU LÓGICA ORIGINAL SE MANTIENE INTACTA]
         if paso == 'esperando_hora':
             hora = user_message
             canchas = obtener_canchas_disponibles(sesion['fecha'], hora)
