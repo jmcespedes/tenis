@@ -127,10 +127,10 @@ def obtener_canchas_disponibles(fecha, hora_inicial):
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT distinct cancha
-            FROM reservas
-            WHERE fecha = %s AND hora_inicial = %s AND reservada = 0
-        """, (fecha, hora_inicial))
+            SELECT cancha_id 
+            FROM reservas 
+            WHERE fecha = %s AND CAST(hora_inicial AS TEXT) LIKE %s
+        """, (fecha, f"{hora_inicial}%",))
         canchas = [row[0] for row in cur.fetchall()]
         cur.close()
         conn.close()
@@ -256,7 +256,7 @@ def whatsapp_reply():
 
         if 'si' in user_message.lower() or 'sí' in user_message.lower():
             response.message(
-                f"{EMOJIS['hand']} ¡Hola {socio['nombre']}! {EMOJIS['happy']}\n\n"
+                f"{EMOJIS['{socio['nombre']}! {EMOJIS['happy']}\n\n"
                 f"{EMOJIS['calendar']} Por favor, escribe el día que deseas reservar (DD-MM)\n"
                 f"Ejemplo: 10-03 para el 10 de Marzo"
             )
