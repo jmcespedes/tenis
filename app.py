@@ -9,7 +9,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Configuración del logger
+# Configuración inicial del logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -37,22 +37,16 @@ EMOJIS = {
     'court': '🏟️'
 }
 
-# Funciones de base de datos y sesión
-def get_db_connection():
-    return psycopg2.connect(
-        host=DB_CONFIG['host'],
-        user=DB_CONFIG['user'],
-        password=DB_CONFIG['password'],
-        dbname=DB_CONFIG['dbname'],
-        port=DB_CONFIG['port'],
-        cursor_factory=RealDictCursor
-    )
+# Funciones auxiliares
 
-def cargar_sesion(numero):
+def get_db_connection():
+    return psycopg2.connect(**DB_CONFIG)
+
+def cargar_sesion(telefono):
     try:
         conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM sesiones WHERE numero = %s", (numero,))
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM sesiones WHERE telefono = %s", (telefono,))
         sesion = cur.fetchone()
         cur.close()
         conn.close()
@@ -61,51 +55,135 @@ def cargar_sesion(numero):
         logger.error(f"Error al cargar sesión: {e}", exc_info=True)
         return None
 
-def guardar_sesion(numero, paso, fecha=None, hora=None):
+def guardar_sesion(telefono, paso, fecha=None, hora=None):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO sesiones (numero, paso, fecha, hora)
+            INSERT INTO sesiones (telefono, paso, fecha, hora)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (numero) DO UPDATE
-            SET paso = EXCLUDED.paso,
-                fecha = EXCLUDED.fecha,
-                hora = EXCLUDED.hora
-        """, (numero, paso, fecha, hora))
+            ON CONFLICT (telefono) DO UPDATE SET paso = EXCLUDED.paso, fecha = EXCLUDED.fecha, hora = EXCLUDED.hora
+        """, (telefono, paso, fecha, hora))
         conn.commit()
         cur.close()
         conn.close()
     except Exception as e:
         logger.error(f"Error al guardar sesión: {e}", exc_info=True)
 
-def limpiar_sesion(numero):
+def limpiar_sesion(telefono):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("DELETE FROM sesiones WHERE numero = %s", (numero,))
+        cur.execute("DELETE FROM sesiones WHERE telefono = %s", (telefono,))
         conn.commit()
         cur.close()
         conn.close()
     except Exception as e:
         logger.error(f"Error al limpiar sesión: {e}", exc_info=True)
 
-# Aquí deberían ir tus funciones: buscar_socio_por_celular, verificar_fecha_disponible,
-# obtener_horas_disponibles, obtener_canchas_disponibles, realizar_reserva
+def buscar_socio_por_celular(telefono):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM socios WHERE telefono = %s", (telefono,))
+        socio = cur.fetchone()
+        cur.close()
+        conn.close()
+        return socio
+    except Exception as e:
+        logger.error(f"Error al buscar socio: {e}", exc_info=True)
+        return None
 
+def verificar_fecha_disponible(fecha_str):
+    try:
+        fecha = datetime.strptime(fecha_str, '%d-%m').replace(year=datetime.now().year)
+        if fecha < datetime.now():
+            return False, "La fecha ya pasó. Por favor elige una futura."
+        return True, fecha.strftime('%Y-%m-%d')
+    except ValueError:
+        return False, "Formato inválido. Usa DD-MM (ejemplo: 18-04)."
+
+def obtener_horas_disponibles(fecha):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT hora_inicial, hora_final, COUNT(*) as canchas
+            FROM disponibilidad
+            WHERE fecha = %s AND disponible = TRUE
+            GROUP BY hora_inicial, hora_final
+            ORDER BY hora_inicial
+        """, (fecha,))
+        horas = cur.fetchall()
+        cur.close()
+        conn.close()
+        return horas
+    except Exception as e:
+        logger.error(f"Error al obtener horas disponibles: {e}", exc_info=True)
+        return []
+
+def obtener_canchas_disponibles(fecha, hora_inicial):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT cancha
+            FROM disponibilidad
+            WHERE fecha = %s AND hora_inicial = %s AND disponible = TRUE
+        """, (fecha, hora_inicial))
+        canchas = [row[0] for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return canchas
+    except Exception as e:
+        logger.error(f"Error al obtener canchas disponibles: {e}", exc_info=True)
+        return []
+
+def realizar_reserva(fecha, hora_inicial, cancha, socio):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT disponible FROM disponibilidad
+            WHERE fecha = %s AND hora_inicial = %s AND cancha = %s
+        """, (fecha, hora_inicial, cancha))
+        resultado = cur.fetchone()
+        if not resultado or not resultado[0]:
+            return False
+
+        cur.execute("""
+            UPDATE disponibilidad
+            SET disponible = FALSE
+            WHERE fecha = %s AND hora_inicial = %s AND cancha = %s
+        """, (fecha, hora_inicial, cancha))
+
+        cur.execute("""
+            INSERT INTO reservas (fecha, hora, cancha, socio_id)
+            VALUES (%s, %s, %s, %s)
+        """, (fecha, hora_inicial, cancha, socio['id']))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"Error al realizar reserva: {e}", exc_info=True)
+        return False
+
+# Ruta principal
 @app.route("/whatsapp", methods=['POST'])
 def whatsapp_reply():
     try:
         user_message = request.form.get('Body', '').strip()
         whatsapp_number = request.form.get('From', '')
         user_number = whatsapp_number.replace('whatsapp:', '')
-        
+
         logger.info(f"Mensaje de {user_number}: {user_message}")
 
         sesion = cargar_sesion(user_number)
         paso = sesion['paso'] if sesion else None
         socio = buscar_socio_por_celular(user_number)
-        
+
         response = MessagingResponse()
 
         if not socio:
@@ -200,3 +278,4 @@ def whatsapp_reply():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
