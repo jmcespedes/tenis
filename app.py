@@ -109,8 +109,8 @@ def obtener_horas_disponibles(fecha):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
             SELECT hora_inicial, hora_final, COUNT(*) as canchas
-            FROM disponibilidad
-            WHERE fecha = %s AND disponible = TRUE
+            FROM RESERVAS
+            WHERE fecha = %s AND reservada = 0
             GROUP BY hora_inicial, hora_final
             ORDER BY hora_inicial
         """, (fecha,))
@@ -127,9 +127,9 @@ def obtener_canchas_disponibles(fecha, hora_inicial):
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT cancha
-            FROM disponibilidad
-            WHERE fecha = %s AND hora_inicial = %s AND disponible = TRUE
+            SELECT distinct cancha
+            FROM reservas
+            WHERE fecha = %s AND hora_inicial = %s AND reservada = 0
         """, (fecha, hora_inicial))
         canchas = [row[0] for row in cur.fetchall()]
         cur.close()
@@ -144,7 +144,7 @@ def realizar_reserva(fecha, hora_inicial, cancha, socio):
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT disponible FROM disponibilidad
+            SELECT reservada FROM reservas
             WHERE fecha = %s AND hora_inicial = %s AND cancha = %s
         """, (fecha, hora_inicial, cancha))
         resultado = cur.fetchone()
@@ -152,8 +152,8 @@ def realizar_reserva(fecha, hora_inicial, cancha, socio):
             return False
 
         cur.execute("""
-            UPDATE disponibilidad
-            SET disponible = FALSE
+            UPDATE reservas
+            SET reservada = 1
             WHERE fecha = %s AND hora_inicial = %s AND cancha = %s
         """, (fecha, hora_inicial, cancha))
 
