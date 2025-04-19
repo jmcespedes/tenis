@@ -129,7 +129,7 @@ def obtener_canchas_disponibles(fecha, hora_inicial):
         cur.execute("""
             SELECT distinct cancha
             FROM reservas 
-            WHERE fecha = %s AND CAST(hora_inicial AS TEXT) LIKE %s
+            WHERE fecha = %s AND reservada = 0 AND CAST(hora_inicial AS TEXT) LIKE %s
         """, (fecha, f"{hora_inicial}%",))
         canchas = [row[0] for row in cur.fetchall()]
         cur.close()
@@ -143,29 +143,29 @@ def realizar_reserva(fecha, hora_inicial, cancha, socio):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("""
-            SELECT reservada FROM reservas
-            WHERE fecha = %s AND hora_inicial = %s AND cancha = %s
-        """, (fecha, hora_inicial, cancha))
-        resultado = cur.fetchone()
-        if not resultado or not resultado[0]:
-            return False
 
+        # 1. Verificar si la hora/cancha existe y está disponible (reservada = 0)
+        cur.execute("""
+            SELECT id FROM reservas
+            WHERE fecha = %s AND hora_inicial = %s AND cancha = %s AND reservada = 0
+        """, (fecha, hora_inicial, cancha))
+        reserva_disponible = cur.fetchone()
+
+        if not reserva_disponible:
+            return False  # No existe o ya está reservada
+
+        # 2. Si está disponible, actualizar a "reservada" y asignar al socio
         cur.execute("""
             UPDATE reservas
-            SET reservada = 1
-            WHERE fecha = %s AND hora_inicial = %s AND cancha = %s
-        """, (fecha, hora_inicial, cancha))
-
-        cur.execute("""
-            INSERT INTO reservas (fecha, hora, cancha, socio_id)
-            VALUES (%s, %s, %s, %s)
-        """, (fecha, hora_inicial, cancha, socio['id']))
+            SET reservada = 1, socio_id = %s
+            WHERE fecha = %s AND hora_inicial = %s AND cancha = %s AND reservada = 0
+        """, (socio['id'], fecha, hora_inicial, cancha))
 
         conn.commit()
         cur.close()
         conn.close()
-        return True
+        return True  # Reserva exitosa
+
     except Exception as e:
         logger.error(f"Error al realizar reserva: {e}", exc_info=True)
         return False
@@ -256,13 +256,12 @@ def whatsapp_reply():
 
         if 'si' in user_message.lower() or 'sí' in user_message.lower():
             response.message(
-                f"{EMOJIS['{socio['nombre']}! {EMOJIS['happy']}\n\n"
+                f"{EMOJIS['{Socio['nombre']}! {EMOJIS['tennis']}\n\n"
                 f"{EMOJIS['calendar']} Por favor, escribe el día que deseas reservar (DD-MM)\n"
-                f"Ejemplo: 10-03 para el 10 de Marzo"
+                f"Ejemplo: 19-04 para el 19 de Abril"
             )
         else:
-            response.message(
-                f"{EMOJIS['hand']} ¡Hola {socio['nombre']}! {EMOJIS['happy']}\n\n"
+            response.message(                
                 f"{EMOJIS['tennis']} *Bienvenido a Club de Tenis Melipilla* {EMOJIS['tennis']}\n\n"
                 f"{EMOJIS['calendar']} ¿Deseas reservar una cancha? Responde 'SI'"
             )
